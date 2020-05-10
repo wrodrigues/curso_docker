@@ -1,0 +1,66 @@
+version: '3'
+volumes:
+  dados:
+networks: 
+  banco:
+  fila:
+  web:
+services:
+  db:
+    image: postgres:9.6
+    environment: 
+      - POSTGRES_PASSWORD=abc123
+    volumes:
+      - dados:/var/lib/postgresql/data
+      - ./scripts:/scripts
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks: 
+      - banco
+    ports: 
+      - 5432:5432
+  frontend:
+    image: nginx:1.13
+    volumes:
+      - ./web:/usr/share/nginx/html/
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - 80:80
+    networks: 
+      - web 
+    depends_on:
+      - app
+  app:
+    image: python:3.6
+    ports: 
+      - 8080:8080
+    volumes: 
+      - ./app:/app
+    working_dir: /app
+    command: bash ./app.sh
+    networks: 
+      - banco
+      - web
+      - fila
+    depends_on: 
+      - db
+      - queue
+    environment: 
+      - POSTGRES_PASSWORD=abc123
+      - POSTGRES_DB=email_sender
+      - POSTGRES_USER=postgres
+  queue:
+    image: redis:alpine3.11
+    networks:
+      - fila
+    ports: 
+      - 6379:6379
+  worker:
+    build: worker
+    volumes: 
+      - ./worker:/worker
+    working_dir: /worker
+    command: worker.py
+    networks:
+      - fila
+    depends_on: 
+      - queue
